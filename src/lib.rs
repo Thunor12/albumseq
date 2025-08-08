@@ -89,6 +89,7 @@ impl<'a> Iterator for TracklistPermutations<'a> {
 
 /// Physical medium with sides and max duration per side.
 pub struct Medium {
+    pub name: String,
     pub sides: usize,
     pub max_duration_per_side: Duration,
 }
@@ -254,6 +255,7 @@ mod tests {
     fn test_medium_fits_and_same_side() {
         let tracks = Tracklist::from(vec![("A", 10.0), ("B", 8.0), ("C", 12.0), ("D", 7.0)]);
         let medium = Medium {
+            name: "test_medium".into(),
             sides: 2,
             max_duration_per_side: 20.0,
         };
@@ -264,6 +266,7 @@ mod tests {
         assert!(!medium.on_same_side(&tracks, "A", "D"));
 
         let medium2 = Medium {
+            name: "test_medium".into(),
             sides: 2,
             max_duration_per_side: 15.0,
         };
@@ -271,6 +274,7 @@ mod tests {
 
         let tracks2 = Tracklist::from(vec![("A", 10.0), ("B", 5.0), ("C", 7.0), ("D", 7.0)]);
         let medium3 = Medium {
+            name: "test_medium".into(),
             sides: 3,
             max_duration_per_side: 12.0,
         };
@@ -280,6 +284,7 @@ mod tests {
 
         let tracks3 = Tracklist::from(vec![("A", 21.0), ("B", 5.0)]);
         let medium4 = Medium {
+            name: "test_medium".into(),
             sides: 2,
             max_duration_per_side: 20.0,
         };
@@ -289,6 +294,7 @@ mod tests {
     #[test]
     fn test_score_tracklist() {
         let medium = Medium {
+            name: "test_medium".into(),
             sides: 2,
             max_duration_per_side: 10.0,
         };
