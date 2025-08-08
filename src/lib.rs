@@ -1,4 +1,4 @@
-// src/lib.rs
+
 use itertools::Itertools; // bring permutations() into scope
 
 /// Duration type (seconds, using f64)
@@ -75,7 +75,6 @@ impl<'a> Iterator for TracklistPermutations<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|perm| {
-            // clone Tracks into a concrete Tracklist (owned)
             Tracklist::new(perm.into_iter().cloned().collect())
         })
     }
@@ -84,6 +83,23 @@ impl<'a> Iterator for TracklistPermutations<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cmp::Ordering;
+
+    // Implement Ord only for tests, to allow sorting Tracklists by lex order of titles.
+    impl PartialOrd for Tracklist {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    impl Ord for Tracklist {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.0
+                .iter()
+                .map(|t| &t.title)
+                .cmp(other.0.iter().map(|t| &t.title))
+        }
+    }
 
     #[test]
     fn test_tracklist_permutations() {
@@ -93,13 +109,11 @@ mod tests {
             Track::new("C", 2.75),
         ];
 
-        let perms: Vec<_> = TracklistPermutations::new(&tracks).collect();
+        let mut perms: Vec<_> = TracklistPermutations::new(&tracks).collect();
 
-        // Expect 3! = 6 permutations
         assert_eq!(perms.len(), 6);
 
-        // Define expected permutations explicitly
-        let expected = vec![
+        let mut expected = vec![
             Tracklist::new(vec![
                 Track::new("A", 3.5),
                 Track::new("B", 4.0),
@@ -132,12 +146,9 @@ mod tests {
             ]),
         ];
 
-        // Sort both lists to ignore order differences
-        let mut perms_sorted = perms.clone();
-        perms_sorted.sort_by(|a, b| a.titles().cmp(&b.titles()));
-        let mut expected_sorted = expected.clone();
-        expected_sorted.sort_by(|a, b| a.titles().cmp(&b.titles()));
+        perms.sort();
+        expected.sort();
 
-        assert_eq!(perms_sorted, expected_sorted);
+        assert_eq!(perms, expected);
     }
 }
