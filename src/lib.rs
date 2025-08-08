@@ -127,6 +127,57 @@ impl Medium {
     }
 }
 
+/// Constraint types with weights
+#[derive(Debug, Clone)]
+pub struct Constraint {
+    pub kind: ConstraintKind,
+    pub weight: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum ConstraintKind {
+    /// Track at a specific position
+    AtPosition { title: String, position: usize },
+
+    /// Two tracks adjacent in order
+    Adjacent(String, String),
+}
+
+/// Independent scoring function
+pub fn score_tracklist(
+    tracklist: &Tracklist,
+    constraints: &[Constraint],
+    medium: &Medium,
+) -> Option<usize> {
+    if !medium.fits(tracklist) {
+        return None;
+    }
+
+    let mut score = 0;
+
+    for constraint in constraints {
+        match &constraint.kind {
+            ConstraintKind::AtPosition { title, position } => {
+                if let Some(track) = tracklist.0.get(*position) {
+                    if &track.title == title {
+                        score += constraint.weight;
+                    }
+                }
+            }
+            ConstraintKind::Adjacent(t1, t2) => {
+                for window in tracklist.0.windows(2) {
+                    if &window[0].title == t1 && &window[1].title == t2 {
+                        score += constraint.weight;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    Some(score)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,5 +259,63 @@ mod tests {
             max_duration_per_side: 20.0,
         };
         assert!(!medium4.fits(&tracks3));
+    }
+
+    #[test]
+    fn test_score_tracklist() {
+        let medium = Medium {
+            sides: 2,
+            max_duration_per_side: 20.0,
+        };
+
+        let tracklist = Tracklist::from(vec![
+            ("Intro", 3.0),
+            ("First", 5.0),
+            ("Second", 7.0),
+            ("Outro", 4.0),
+        ]);
+
+        let constraints = vec![
+            Constraint {
+                kind: ConstraintKind::AtPosition {
+                    title: "Intro".to_string(),
+                    position: 0,
+                },
+                weight: 10,
+            },
+            Constraint {
+                kind: ConstraintKind::Adjacent("First".into(), "Second".into()),
+                weight: 5,
+            },
+        ];
+
+        let score = score_tracklist(&tracklist, &constraints, &medium);
+        assert_eq!(score, Some(15));
+
+        let bad_tracklist = Tracklist::from(vec![
+            ("First", 5.0),
+            ("Intro", 3.0),
+            ("Second", 7.0),
+            ("Outro", 4.0),
+        ]);
+
+        // Still fits, but constraints fail (Intro not at pos 0, adjacency broken)
+        assert_eq!(
+            score_tracklist(&bad_tracklist, &constraints, &medium),
+            Some(0)
+        );
+
+        let too_long_tracklist = Tracklist::from(vec![
+            ("Intro", 15.0),
+            ("First", 10.0),
+            ("Second", 12.0),
+            ("Outro", 14.0),
+        ]);
+
+        // Does not fit medium, so None returned
+        assert_eq!(
+            score_tracklist(&too_long_tracklist, &constraints, &medium),
+            None
+        );
     }
 }
