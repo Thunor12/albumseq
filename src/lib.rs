@@ -92,6 +92,41 @@ impl<'a> Iterator for TracklistPermutations<'a> {
     }
 }
 
+/// Represents a physical medium (e.g. Vinyl, Cassette)
+/// with a number of sides and max duration per side.
+pub struct Medium {
+    pub sides: usize,
+    pub max_duration_per_side: Duration,
+}
+
+impl Medium {
+    pub fn fits(&self, tracklist: &Tracklist) -> bool {
+        let durations: Vec<Duration> = tracklist.0.iter().map(|t| t.duration).collect();
+
+        // Reject if the tracklist is longer than the medium's total capacity
+        if tracklist.duration() > self.sides as f64 * self.max_duration_per_side {
+            return false;
+        }
+
+        let mut sides_used = 1;
+        let mut current_sum = 0.0;
+
+        for &d in &durations {
+            if current_sum + d <= self.max_duration_per_side {
+                current_sum += d;
+            } else {
+                // Need to start a new side
+                sides_used += 1;
+                if sides_used > self.sides {
+                    return false;
+                }
+                current_sum = d;
+            }
+        }
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,5 +197,40 @@ mod tests {
         expected.sort();
 
         assert_eq!(perms, expected);
+    }
+
+    #[test]
+    fn test_medium_fits() {
+        let tracks = Tracklist::from(vec![("A", 10.0), ("B", 8.0), ("C", 12.0), ("D", 7.0)]);
+        let medium = Medium {
+            sides: 2,
+            max_duration_per_side: 20.0,
+        };
+        assert!(medium.fits(&tracks)); // e.g. (A+B=18), (C+D=19)
+
+        let medium2 = Medium {
+            sides: 2,
+            max_duration_per_side: 15.0,
+        };
+        assert!(!medium2.fits(&tracks)); // no 2-side split possible with max 15
+
+        let medium3 = Medium {
+            sides: 3,
+            max_duration_per_side: 12.0,
+        };
+        assert!(!medium3.fits(&tracks)); // no 3-side split possible with max 12
+
+        let tracks2 = Tracklist::from(vec![("A", 10.0), ("B", 5.0), ("C", 7.0), ("D", 7.0)]);
+        assert!(medium3.fits(&tracks2)); // (A=10), (B+C=12), (D=7)
+
+        let tracks3 = Tracklist::from(vec![
+            ("A", 21.0), // longer than max 20
+            ("B", 5.0),
+        ]);
+        let medium4 = Medium {
+            sides: 2,
+            max_duration_per_side: 20.0,
+        };
+        assert!(!medium4.fits(&tracks3));
     }
 }
