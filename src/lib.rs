@@ -161,36 +161,12 @@ mod tests {
         assert_eq!(perms.len(), 6);
 
         let mut expected = vec![
-            Tracklist::new(vec![
-                Track::new("A", 3.5),
-                Track::new("B", 4.0),
-                Track::new("C", 2.75),
-            ]),
-            Tracklist::new(vec![
-                Track::new("A", 3.5),
-                Track::new("C", 2.75),
-                Track::new("B", 4.0),
-            ]),
-            Tracklist::new(vec![
-                Track::new("B", 4.0),
-                Track::new("A", 3.5),
-                Track::new("C", 2.75),
-            ]),
-            Tracklist::new(vec![
-                Track::new("B", 4.0),
-                Track::new("C", 2.75),
-                Track::new("A", 3.5),
-            ]),
-            Tracklist::new(vec![
-                Track::new("C", 2.75),
-                Track::new("A", 3.5),
-                Track::new("B", 4.0),
-            ]),
-            Tracklist::new(vec![
-                Track::new("C", 2.75),
-                Track::new("B", 4.0),
-                Track::new("A", 3.5),
-            ]),
+            Tracklist::from(vec![("A", 3.5), ("B", 4.0), ("C", 2.75)]),
+            Tracklist::from(vec![("A", 3.5), ("C", 2.75), ("B", 4.0)]),
+            Tracklist::from(vec![("B", 4.0), ("A", 3.5), ("C", 2.75)]),
+            Tracklist::from(vec![("B", 4.0), ("C", 2.75), ("A", 3.5)]),
+            Tracklist::from(vec![("C", 2.75), ("A", 3.5), ("B", 4.0)]),
+            Tracklist::from(vec![("C", 2.75), ("B", 4.0), ("A", 3.5)]),
         ];
 
         perms.sort();
