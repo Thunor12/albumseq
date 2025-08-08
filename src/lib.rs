@@ -1,4 +1,4 @@
-use itertools::Itertools; // for permutations()
+use itertools::{Itertools, Permutations}; // for permutations()
 
 /// Duration type (seconds, using f64)
 pub type Duration = f64;
@@ -67,25 +67,23 @@ where
 
 /// Iterator producing permutations of a tracklist lazily.
 pub struct TracklistPermutations<'a> {
-    inner: Box<dyn Iterator<Item = Vec<&'a Track>> + 'a>,
+    inner: Permutations<std::slice::Iter<'a, Track>>,
 }
 
 impl<'a> TracklistPermutations<'a> {
     pub fn new(tracks: &'a [Track]) -> Self {
         let len = tracks.len();
         Self {
-            inner: Box::new(tracks.iter().permutations(len)),
+            inner: tracks.iter().permutations(len),
         }
     }
 }
 
 impl<'a> Iterator for TracklistPermutations<'a> {
-    type Item = Tracklist;
+    type Item = Vec<&'a Track>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|perm| Tracklist::new(perm.into_iter().cloned().collect()))
+        self.inner.next()
     }
 }
 
@@ -231,11 +229,13 @@ mod tests {
             Track::new("C", 2.75),
         ];
 
-        let mut perms: Vec<_> = TracklistPermutations::new(&tracks).collect();
+        let mut perms: Vec<Tracklist> = TracklistPermutations::new(&tracks)
+            .map(|perm| Tracklist::new(perm.into_iter().cloned().collect()))
+            .collect();
 
         assert_eq!(perms.len(), 6);
 
-        let mut expected = vec![
+        let mut expected: Vec<Tracklist> = vec![
             Tracklist::from(vec![("A", 3.5), ("B", 4.0), ("C", 2.75)]),
             Tracklist::from(vec![("A", 3.5), ("C", 2.75), ("B", 4.0)]),
             Tracklist::from(vec![("B", 4.0), ("A", 3.5), ("C", 2.75)]),
