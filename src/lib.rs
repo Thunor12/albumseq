@@ -1,4 +1,3 @@
-
 use itertools::Itertools; // bring permutations() into scope
 
 /// Duration type (seconds, using f64)
@@ -56,6 +55,19 @@ impl PartialEq for Tracklist {
 }
 impl Eq for Tracklist {} // safe because we used String equality (total order)
 
+impl<T> From<Vec<(T, Duration)>> for Tracklist
+where
+    T: Into<String>,
+{
+    fn from(tuples: Vec<(T, Duration)>) -> Self {
+        let tracks = tuples
+            .into_iter()
+            .map(|(title, duration)| Track::new(title, duration))
+            .collect();
+        Tracklist(tracks)
+    }
+}
+
 /// Iterator wrapper producing Tracklist permutations lazily.
 pub struct TracklistPermutations<'a> {
     inner: Box<dyn Iterator<Item = Vec<&'a Track>> + 'a>,
@@ -74,9 +86,9 @@ impl<'a> Iterator for TracklistPermutations<'a> {
     type Item = Tracklist;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|perm| {
-            Tracklist::new(perm.into_iter().cloned().collect())
-        })
+        self.inner
+            .next()
+            .map(|perm| Tracklist::new(perm.into_iter().cloned().collect()))
     }
 }
 
