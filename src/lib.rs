@@ -41,6 +41,7 @@ impl<'a> Iterator for TracklistPermutations<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use itertools::Itertools; // for sorted()
 
     #[test]
     fn test_tracklist_permutations() {
@@ -50,10 +51,33 @@ mod tests {
             Track::new("C", 2.75),
         ];
 
-        let perms: Vec<_> = TracklistPermutations::new(&tracks).collect();
+        let perms: Vec<_> = TracklistPermutations::new(&tracks)
+            .map(|p| p.iter().map(|t| t.title.as_str()).collect::<Vec<_>>())
+            .collect();
+
+        // We expect exactly 3! = 6 permutations
         assert_eq!(perms.len(), 6);
-        assert_eq!(perms[0][0].title, "A");
-        assert_eq!(perms[0][1].title, "B");
-        assert_eq!(perms[0][2].title, "C");
+
+        // All permutations should be unique
+        let unique_count = perms.iter().sorted().dedup().count();
+        assert_eq!(unique_count, perms.len());
+
+        // The expected permutations of titles
+        let expected = vec![
+            vec!["A", "B", "C"],
+            vec!["A", "C", "B"],
+            vec!["B", "A", "C"],
+            vec!["B", "C", "A"],
+            vec!["C", "A", "B"],
+            vec!["C", "B", "A"],
+        ];
+
+        // Sort both for comparison regardless of order
+        let mut perms_sorted = perms.clone();
+        perms_sorted.sort();
+        let mut expected_sorted = expected.clone();
+        expected_sorted.sort();
+
+        assert_eq!(perms_sorted, expected_sorted);
     }
 }
