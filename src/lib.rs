@@ -171,6 +171,10 @@ pub fn score_tracklist(
     constraints: &[Constraint],
     medium: &Medium,
 ) -> usize {
+    if !medium.fits(tracklist) {
+        return 0; // No score if it doesn't fit the medium
+    }
+
     let mut score = 0;
 
     for constraint in constraints {
