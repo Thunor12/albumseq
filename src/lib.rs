@@ -1,4 +1,4 @@
-use itertools::Itertools; // bring permutations() into scope
+use itertools::Itertools; // for permutations()
 
 /// Duration type (seconds, using f64)
 pub type Duration = f64;
@@ -38,10 +38,7 @@ impl Tracklist {
     }
 }
 
-/// Equality for Tracklist: compare the ordered sequence of titles only.
-/// This avoids `f64` equality/Eq/Hash problems while still being correct for
-/// permutation-checking in tests. If you want durations to be part of equality,
-/// switch to an integer duration type (e.g. milliseconds).
+/// Equality compares only the ordered titles to avoid f64 Eq issues.
 impl PartialEq for Tracklist {
     fn eq(&self, other: &Self) -> bool {
         if self.0.len() != other.0.len() {
@@ -53,7 +50,7 @@ impl PartialEq for Tracklist {
             .all(|(a, b)| a.title == b.title)
     }
 }
-impl Eq for Tracklist {} // safe because we used String equality (total order)
+impl Eq for Tracklist {}
 
 impl<T> From<Vec<(T, Duration)>> for Tracklist
 where
@@ -68,7 +65,7 @@ where
     }
 }
 
-/// Iterator wrapper producing Tracklist permutations lazily.
+/// Iterator producing permutations of a tracklist lazily.
 pub struct TracklistPermutations<'a> {
     inner: Box<dyn Iterator<Item = Vec<&'a Track>> + 'a>,
 }
@@ -92,18 +89,17 @@ impl<'a> Iterator for TracklistPermutations<'a> {
     }
 }
 
-/// Represents a physical medium (e.g. Vinyl, Cassette)
-/// with a number of sides and max duration per side.
+/// Physical medium with sides and max duration per side.
 pub struct Medium {
     pub sides: usize,
     pub max_duration_per_side: Duration,
 }
 
 impl Medium {
+    /// Check if tracklist fits medium sides without splitting tracks.
     pub fn fits(&self, tracklist: &Tracklist) -> bool {
         let durations: Vec<Duration> = tracklist.0.iter().map(|t| t.duration).collect();
 
-        // Reject if the tracklist is longer than the medium's total capacity
         if tracklist.duration() > self.sides as f64 * self.max_duration_per_side {
             return false;
         }
@@ -112,10 +108,12 @@ impl Medium {
         let mut current_sum = 0.0;
 
         for &d in &durations {
+            if d > self.max_duration_per_side {
+                return false; // track too long for a side
+            }
             if current_sum + d <= self.max_duration_per_side {
                 current_sum += d;
             } else {
-                // Need to start a new side
                 sides_used += 1;
                 if sides_used > self.sides {
                     return false;
@@ -125,57 +123,84 @@ impl Medium {
         }
         true
     }
+
+    /// Returns true if the two tracks are on the same side when split by duration.
+    pub fn on_same_side(&self, tracklist: &Tracklist, t1: &str, t2: &str) -> bool {
+        let mut sides_used = 0;
+        let mut current_sum = 0.0;
+        let mut side_indices = Vec::with_capacity(tracklist.0.len());
+
+        for track in &tracklist.0 {
+            if current_sum + track.duration <= self.max_duration_per_side {
+                current_sum += track.duration;
+            } else {
+                sides_used += 1;
+                current_sum = track.duration;
+            }
+            side_indices.push(sides_used);
+        }
+
+        let pos1 = tracklist.0.iter().position(|t| t.title == t1);
+        let pos2 = tracklist.0.iter().position(|t| t.title == t2);
+
+        if let (Some(i1), Some(i2)) = (pos1, pos2) {
+            side_indices[i1] == side_indices[i2]
+        } else {
+            false // one or both tracks not found
+        }
+    }
 }
 
-/// Constraint types with weights
+/// Kind of constraint (without weight).
+#[derive(Debug, Clone)]
+pub enum ConstraintKind {
+    AtPosition(String, usize),  // (track title, position)
+    Adjacent(String, String),   // (track1, track2)
+    OnSameSide(String, String), // (track1, track2)
+}
+
+/// Constraint with explicit weight.
 #[derive(Debug, Clone)]
 pub struct Constraint {
     pub kind: ConstraintKind,
     pub weight: usize,
 }
 
-#[derive(Debug, Clone)]
-pub enum ConstraintKind {
-    /// Track at a specific position
-    AtPosition { title: String, position: usize },
-
-    /// Two tracks adjacent in order
-    Adjacent(String, String),
-}
-
-/// Independent scoring function
+/// Score the tracklist against constraints and medium.
 pub fn score_tracklist(
     tracklist: &Tracklist,
     constraints: &[Constraint],
     medium: &Medium,
-) -> Option<usize> {
-    if !medium.fits(tracklist) {
-        return None;
-    }
-
+) -> usize {
     let mut score = 0;
 
     for constraint in constraints {
         match &constraint.kind {
-            ConstraintKind::AtPosition { title, position } => {
-                if let Some(track) = tracklist.0.get(*position) {
+            ConstraintKind::AtPosition(title, pos) => {
+                if let Some(track) = tracklist.0.get(*pos) {
                     if &track.title == title {
                         score += constraint.weight;
                     }
                 }
             }
             ConstraintKind::Adjacent(t1, t2) => {
-                for window in tracklist.0.windows(2) {
-                    if &window[0].title == t1 && &window[1].title == t2 {
-                        score += constraint.weight;
-                        break;
-                    }
+                if tracklist
+                    .0
+                    .windows(2)
+                    .any(|w| w[0].title == *t1 && w[1].title == *t2)
+                {
+                    score += constraint.weight;
+                }
+            }
+            ConstraintKind::OnSameSide(t1, t2) => {
+                if medium.on_same_side(tracklist, t1, t2) {
+                    score += constraint.weight;
                 }
             }
         }
     }
 
-    Some(score)
+    score
 }
 
 #[cfg(test)]
@@ -183,13 +208,12 @@ mod tests {
     use super::*;
     use std::cmp::Ordering;
 
-    // Implement Ord only for tests, to allow sorting Tracklists by lex order of titles.
+    // For testing: lex order on track titles.
     impl PartialOrd for Tracklist {
         fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
             Some(self.cmp(other))
         }
     }
-
     impl Ord for Tracklist {
         fn cmp(&self, other: &Self) -> Ordering {
             self.0
@@ -227,13 +251,17 @@ mod tests {
     }
 
     #[test]
-    fn test_medium_fits() {
+    fn test_medium_fits_and_same_side() {
         let tracks = Tracklist::from(vec![("A", 10.0), ("B", 8.0), ("C", 12.0), ("D", 7.0)]);
         let medium = Medium {
             sides: 2,
             max_duration_per_side: 20.0,
         };
-        assert!(medium.fits(&tracks)); // e.g. (A+B=18), (C+D=19)
+        assert!(medium.fits(&tracks)); // (A+B=18), (C+D=19)
+        assert!(medium.on_same_side(&tracks, "A", "B"));
+        assert!(medium.on_same_side(&tracks, "C", "D"));
+        assert!(!medium.on_same_side(&tracks, "B", "C"));
+        assert!(!medium.on_same_side(&tracks, "A", "D"));
 
         let medium2 = Medium {
             sides: 2,
@@ -241,19 +269,16 @@ mod tests {
         };
         assert!(!medium2.fits(&tracks)); // no 2-side split possible with max 15
 
+        let tracks2 = Tracklist::from(vec![("A", 10.0), ("B", 5.0), ("C", 7.0), ("D", 7.0)]);
         let medium3 = Medium {
             sides: 3,
             max_duration_per_side: 12.0,
         };
-        assert!(!medium3.fits(&tracks)); // no 3-side split possible with max 12
-
-        let tracks2 = Tracklist::from(vec![("A", 10.0), ("B", 5.0), ("C", 7.0), ("D", 7.0)]);
         assert!(medium3.fits(&tracks2)); // (A=10), (B+C=12), (D=7)
+        assert!(medium3.on_same_side(&tracks2, "B", "C"));
+        assert!(!medium3.on_same_side(&tracks2, "A", "B"));
 
-        let tracks3 = Tracklist::from(vec![
-            ("A", 21.0), // longer than max 20
-            ("B", 5.0),
-        ]);
+        let tracks3 = Tracklist::from(vec![("A", 21.0), ("B", 5.0)]);
         let medium4 = Medium {
             sides: 2,
             max_duration_per_side: 20.0,
@@ -265,57 +290,69 @@ mod tests {
     fn test_score_tracklist() {
         let medium = Medium {
             sides: 2,
-            max_duration_per_side: 20.0,
+            max_duration_per_side: 10.0,
         };
-
-        let tracklist = Tracklist::from(vec![
-            ("Intro", 3.0),
-            ("First", 5.0),
-            ("Second", 7.0),
-            ("Outro", 4.0),
-        ]);
 
         let constraints = vec![
             Constraint {
-                kind: ConstraintKind::AtPosition {
-                    title: "Intro".to_string(),
-                    position: 0,
-                },
-                weight: 10,
+                kind: ConstraintKind::AtPosition("Intro".into(), 0),
+                weight: 7,
             },
             Constraint {
                 kind: ConstraintKind::Adjacent("First".into(), "Second".into()),
                 weight: 5,
             },
+            Constraint {
+                kind: ConstraintKind::OnSameSide("Second".into(), "Third".into()),
+                weight: 2,
+            },
         ];
 
-        let score = score_tracklist(&tracklist, &constraints, &medium);
-        assert_eq!(score, Some(15));
+        let max_score = constraints.iter().map(|c| c.weight).sum();
 
-        let bad_tracklist = Tracklist::from(vec![
+        let tracks = Tracklist::from(vec![
+            ("Intro", 5.0),
             ("First", 5.0),
-            ("Intro", 3.0),
-            ("Second", 7.0),
-            ("Outro", 4.0),
+            ("Second", 2.0),
+            ("Third", 2.0),
         ]);
+        // Tracklist respects all constraints
+        assert_eq!(score_tracklist(&tracks, &constraints, &medium), max_score);
 
-        // Still fits, but constraints fail (Intro not at pos 0, adjacency broken)
+        // Third is alone on side 2
+        let tracks = Tracklist::from(vec![
+            ("Intro", 5.0),
+            ("First", 3.0),
+            ("Second", 2.0),
+            ("Third", 2.0),
+        ]);
         assert_eq!(
-            score_tracklist(&bad_tracklist, &constraints, &medium),
-            Some(0)
+            score_tracklist(&tracks, &constraints, &medium),
+            max_score - constraints[2].weight
         );
 
-        let too_long_tracklist = Tracklist::from(vec![
-            ("Intro", 15.0),
-            ("First", 10.0),
-            ("Second", 12.0),
-            ("Outro", 14.0),
+        // Third is alone on side 2 and first and second dont folow
+        let tracks = Tracklist::from(vec![
+            ("Intro", 5.0),
+            ("Second", 2.0),
+            ("First", 3.0),
+            ("Third", 2.0),
         ]);
-
-        // Does not fit medium, so None returned
         assert_eq!(
-            score_tracklist(&too_long_tracklist, &constraints, &medium),
-            None
+            score_tracklist(&tracks, &constraints, &medium),
+            max_score - constraints[2].weight - constraints[1].weight
+        );
+
+        // Third is alone on side 2, first and second dont folow and intro is not at the beginning
+        let tracks = Tracklist::from(vec![
+            ("Second", 2.0),
+            ("Intro", 5.0),
+            ("First", 3.0),
+            ("Third", 2.0),
+        ]);
+        assert_eq!(
+            score_tracklist(&tracks, &constraints, &medium),
+            max_score - constraints[2].weight - constraints[1].weight - constraints[0].weight
         );
     }
 }
